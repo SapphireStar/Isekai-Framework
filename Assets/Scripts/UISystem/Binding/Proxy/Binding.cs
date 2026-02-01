@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using UnityEngine;
+using UnityEngine.Events;
+using static UnityEngine.GraphicsBuffer;
 
 public class Binding : AbstractBinding
 {
@@ -77,7 +79,7 @@ public class Binding : AbstractBinding
         }
         catch (Exception e)
         {
-            Debug.LogFormat("An exception occurs in UpdateTGargetOnBind.exception: {0}", e);
+            Debug.LogFormat("An exception occurs in UpdateTargetOnBind.exception: {0}", e);
         }
     }
 
@@ -85,13 +87,25 @@ public class Binding : AbstractBinding
     {
         this.DisposeSourceProxy();
 
+        DoCreateSourceProxy(source, description);
+
+        // Listen to value changed
+        if(this.IsSubscribeSourceValueChanged(this.BindingMode) && this.sourceProxy is INotifiable)
+        {
+            this.sourceValueChangedHandler = (sender, args) => this.UpdateTargetFromSource();
+            (this.sourceProxy as INotifiable).ValueChanged += this.sourceValueChangedHandler;
+        }
+    }
+
+    protected void DoCreateSourceProxy(object source, SourceDescription description)
+    {
         string path = description.Path;
         var nodes = path.Split('.');
         string sourceNodeName = nodes[nodes.Length - 1];
 
         var type = source.GetType();
         var memberInfo = type.GetMember(sourceNodeName);
-        if(memberInfo == null)
+        if (memberInfo == null)
         {
             // 可能获取的是private的member，因此如果之前GetMember失败，再尝试一次private的获取
             memberInfo = type.GetMember(sourceNodeName, BindingFlags.NonPublic | BindingFlags.Instance);
@@ -103,16 +117,17 @@ public class Binding : AbstractBinding
 
         // property
         var propertyInfo = memberInfo[0] as PropertyInfo;
-        if(propertyInfo != null)
+        if (propertyInfo != null)
         {
             this.sourceProxy = new PropertyNodeProxy(source, propertyInfo);
+            return;
         }
 
-        // Listen to value changed
-        if(this.IsSubscribeSourceValueChanged(this.BindingMode) && this.sourceProxy is INotifiable)
+        var methodInfo = memberInfo[0] as MethodInfo;
+        if (methodInfo != null)
         {
-            this.sourceValueChangedHandler = (sender, args) => this.UpdateTargetFromSource();
-            (this.sourceProxy as INotifiable).ValueChanged += this.sourceValueChangedHandler;
+            this.sourceProxy = new MethodNodeProxy(source, methodInfo);
+            return;
         }
     }
 
@@ -139,6 +154,18 @@ public class Binding : AbstractBinding
     {
         this.DisposeTargetProxy();
 
+        DoCreateTargetProxy(target, description);
+
+        // Listen to value changed
+        if (this.IsSubscribeTargetValueChanged(this.BindingMode) && this.targetProxy is INotifiable)
+        {
+            this.targetValueChangedHandler = (sender, args) => this.UpdateTargetFromSource();
+            (this.targetProxy as INotifiable).ValueChanged += this.targetValueChangedHandler;
+        }
+    }
+
+    protected void DoCreateTargetProxy(object target, BindingDescription description)
+    {
         var targetName = description.TargetName;
         var type = description.TargetType;
 
@@ -154,19 +181,21 @@ public class Binding : AbstractBinding
         }
 
         var propertyInfo = memberInfo[0] as PropertyInfo;
-        if(propertyInfo != null )
+        if (propertyInfo != null)
         {
+            if (typeof(UnityEventBase).IsAssignableFrom(propertyInfo.PropertyType))
+            {
+                object unityEvent = propertyInfo.GetValue(target);
+                this.targetProxy = new UnityEventProxy(target, (UnityEvent)unityEvent);
+                return;
+            }
+
             this.targetProxy = new PropertyTargetProxy(target, propertyInfo);
+            return;
         }
         // continue try other proxy
-
-        // Listen to value changed
-        if (this.IsSubscribeTargetValueChanged(this.BindingMode) && this.targetProxy is INotifiable)
-        {
-            this.targetValueChangedHandler = (sender, args) => this.UpdateTargetFromSource();
-            (this.targetProxy as INotifiable).ValueChanged += this.targetValueChangedHandler;
-        }
     }
+
 
     protected void DisposeTargetProxy()
     {

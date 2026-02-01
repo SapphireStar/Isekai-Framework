@@ -18,6 +18,11 @@ namespace Isekai.UI.ViewModels.Screens
                 ChangePropertyAndNotify(ref title, value);
             }
         }
+
+        public void OnShowVersion()
+        {
+            Debug.Log("Show version");
+        }
     }
 }
 

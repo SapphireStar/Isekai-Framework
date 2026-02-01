@@ -16,6 +16,7 @@ namespace Isekai.UI.Views.Screens
     {
         public TextMeshProUGUI Title;
         public TextMeshProUGUI Version;
+        public Button ShowVersionButton;
         
         public override void OnEnterScreen()
         {
@@ -24,6 +25,12 @@ namespace Isekai.UI.Views.Screens
 
             Binding binding = new Binding(ViewModel, Title, bindingDescription);
             ViewModel.Title = "Backpack Battle";
+
+            BindingDescription buttonDescription = new BindingDescription("onClick", "ViewModel.OnShowVersion", BindingMode.OneWay);
+            buttonDescription.TargetType = typeof(Button);
+
+            Binding buttonBinding = new Binding(ViewModel, ShowVersionButton, buttonDescription);
+            
         }
 
         public override void OnExitScreen()
